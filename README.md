@@ -92,7 +92,9 @@ RemoveEndOfAudio.cs
 2)ダイアログが表示されるので以下を入力します：
 
 Video Track No(1-base): 動画ファイルのあるトラック番号
+
 Music Track No(1-base): 動画ファイルのうち削除したいオーディオのあるトラック番号
+
 Time to remove(ms):     削除する時間
 
 3)ファイル選択ダイアログが開くので、作成するログのファイル名を指定します
