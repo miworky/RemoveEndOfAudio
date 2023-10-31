@@ -22,9 +22,8 @@ namespace RemoveEndOfAudio
 
             // パラメータを設定するダイアログを開く
             // 以下をユーザーに選択させる：
-            //　1.1 ビデオトラック番号
-            //  1.2 ビデオトラックに対応するオーディオファイルのあるトラック番号
-            //  1.3 オーディオファイルの最後を削除する時間(ms)
+            //  オーディオファイルのあるトラック番号
+            //  オーディオファイルの最後を削除する時間(ms)
             Tuple<DialogResult, string, string> dialogResult = DoDialog(vegas);
             DialogResult result = dialogResult.Item1;
             if (result != DialogResult.OK)
