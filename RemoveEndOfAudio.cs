@@ -25,24 +25,15 @@ namespace RemoveEndOfAudio
             //　1.1 ビデオトラック番号
             //  1.2 ビデオトラックに対応するオーディオファイルのあるトラック番号
             //  1.3 オーディオファイルの最後を削除する時間(ms)
-            Tuple<DialogResult, string, string, string> dialogResult = DoDialog(vegas);
+            Tuple<DialogResult, string, string> dialogResult = DoDialog(vegas);
             DialogResult result = dialogResult.Item1;
             if (result != DialogResult.OK)
             {
                 return;
             }
 
-            string VideoTrackNo1BaseString = dialogResult.Item2;
-            string MusicTrackNo1BaseString = dialogResult.Item3;
-            string TimeMsToRemoveString = dialogResult.Item4;
-
- 
-            Tuple<bool, int> tupleVideoTrack = to0base(VideoTrackNo1BaseString);
-            if (!tupleVideoTrack.Item1) {
-               return;
-            }
-            int VideoTrackNo0Base = tupleVideoTrack.Item2;
-
+            string MusicTrackNo1BaseString = dialogResult.Item2;
+            string TimeMsToRemoveString = dialogResult.Item3;
 
             Tuple<bool, int> tupleMusicTrack = to0base(MusicTrackNo1BaseString);
             if (!tupleMusicTrack.Item1) {
@@ -50,7 +41,7 @@ namespace RemoveEndOfAudio
             }
             int MusicTrackNo0Base = tupleMusicTrack.Item2;
 
-            if ((vegas.Project.Tracks.Count <= VideoTrackNo0Base) || (vegas.Project.Tracks.Count <= MusicTrackNo0Base))
+            if (vegas.Project.Tracks.Count <= MusicTrackNo0Base)
             {
                 MessageBox.Show("Error: Requires more tracks.");
                 return;
@@ -68,20 +59,7 @@ namespace RemoveEndOfAudio
                 return;
             }
 
-            if ((vegas.Project.Tracks.Count <= VideoTrackNo0Base) || (vegas.Project.Tracks.Count <= MusicTrackNo0Base))
-            {
-                MessageBox.Show("Error: Requires more tracks.");
-                return;
-            }
-
-            Track videoTrack = vegas.Project.Tracks[VideoTrackNo0Base];
             Track musicTrack = vegas.Project.Tracks[MusicTrackNo0Base];
-
-            if (videoTrack.IsAudio()) {
-                MessageBox.Show("Error: videoTrack you designated is Audio track.");
-                return;
-            }
-
             if (!musicTrack.IsAudio()) {
                 MessageBox.Show("Error: musicTrack you designated is NOT Audio track.");
                 return;
@@ -101,7 +79,7 @@ namespace RemoveEndOfAudio
             System.IO.StreamWriter writer = new System.IO.StreamWriter(saveFilePath, false, Encoding.GetEncoding("Shift_JIS"));
 
             // オーディオファイルの最後を指定時間削除する
-            bool err = RemoveEndOfAudioInternal(videoTrack, musicTrack, TimeMsToRemove, writer);
+            bool err = RemoveEndOfAudioInternal(musicTrack, TimeMsToRemove, writer);
             if (!err) {
                 MessageBox.Show("Error: RemoveEndOfAudioInternal");
                 return;
@@ -112,77 +90,38 @@ namespace RemoveEndOfAudio
         }
 
         // オーディオファイルの最後を指定時間削除する
-        // videoTrack: 削除するメディアファイルのビデオトラック
-                // musicTrack: 削除するメディアファイルのオーディオトラック
-                // TimeMsToRemove: 削除する時間(ms)
-                // writer: ログ出力用stream
-        private bool RemoveEndOfAudioInternal(Track videoTrack, Track musicTrack, int TimeMsToRemove, System.IO.StreamWriter writer)
+        // musicTrack: 削除するメディアファイルのオーディオトラック
+        // TimeMsToRemove: 削除する時間(ms)
+        // writer: ログ出力用stream
+        private bool RemoveEndOfAudioInternal(Track musicTrack, int TimeMsToRemove, System.IO.StreamWriter writer)
         {
-            // video Track の全イベントについて処理する
-            foreach (TrackEvent trackEvent in videoTrack.Events)
+            // music Track の全イベントについて処理する
+            foreach (TrackEvent trackEvent in musicTrack.Events)
             {
               Take take = trackEvent.ActiveTake;
               {
 
                   Media media = take.Media;
                   string path = media.FilePath; // メディアのファイルパス
-                  if (IsImage(path) || !IsVideo(path))
+                  if (!IsVideo(path))
                   {
-                      // 画像もしくは動画でないならば無視
-                      continue;
-                  }
-
-                  if (!trackEvent.IsGrouped)
-                  {
-                      // Groupになっていなければ(=対応するAudioイベントがなければ)無視
+                      // 動画でないならば無視
                       continue;
                   }
                   
-                  bool splitted = false;
-                  bool differentTrack = false;
+                  // オーディオファイルの後ろを指定時間削除
 
-                  // グループ化されている全 Event について処理
-                  foreach (TrackEvent groupEvent in trackEvent.Group)
-                  {
-                     if (trackEvent == groupEvent) 
-                     {
-                        // 自分自身は無視
-                        continue;
-                     }
+                  // Eventを分割する時刻を生成
+                  Timecode splitOffset = trackEvent.Length - Timecode.FromMilliseconds(TimeMsToRemove);
 
-                     // 対応するオーディオファイルのトラックが、ユーザーの指定した AudioTrack でなければ、無視
-                     if (groupEvent.Track != musicTrack)
-                     {
-                        differentTrack = true;
-                        continue;
-                     }
-                     
-                     // オーディオファイルの後ろを指定時間削除
+                  // 指定時刻でEventを分割
+                  TrackEvent splittedEvent = trackEvent.Split(splitOffset);
 
-                     // Eventを分割する時刻を生成
-                     Timecode splitOffset = groupEvent.Length - Timecode.FromMilliseconds(TimeMsToRemove);
-
-                     // 指定時刻でEventを分割
-                     TrackEvent splittedEvent = groupEvent.Split(splitOffset);
-
-                     // 分割した後ろのEventがmusicTrackに追加されているので、削除
-                     musicTrack.Events.Remove(splittedEvent);
-                     splitted = true;
-                     break;
-                  }
-
+                  // 分割した後ろのEventがmusicTrackに追加されているので、削除
+                  musicTrack.Events.Remove(splittedEvent);
                   
                   // ログ出力
-                  string str = "";
-                  if (splitted) {
-                     str += "Removed ";
-                  }
-                  if (differentTrack) {
-                     str += "differentTrack ";
-                  }
-
-                  str += path;
-                  writer.WriteLine(str);
+                  writer.WriteLine(path);
                }
             }
             
@@ -358,15 +297,11 @@ namespace RemoveEndOfAudio
             return textBox;
         }
 
-        private Tuple<DialogResult, string, string, string> DoDialog(Vegas vegas)
+        private Tuple<DialogResult, string, string> DoDialog(Vegas vegas)
         {
             Tuple<Form, TableLayoutPanel> tuple = CreateForm("RemoveEndOfAudio");
             Form form = tuple.Item1;
             TableLayoutPanel layout = tuple.Item2;
-
-            // ----------- Video Track No
-            AddLabel(layout, "Video Track No(1-base):");
-            TextBox VideoTrackNoBox = AddTextBox(layout, "2");
 
             // ----------- Music Track No
             AddLabel(layout, "Music Track No(1-base):");
@@ -381,18 +316,16 @@ namespace RemoveEndOfAudio
 
             form.ResumeLayout();
 
-            string textVideoTrackNo = "";
             string textMusicTrackNo = "";
             string textTimeMSToRemove = "";
             DialogResult result = form.ShowDialog(vegas.MainWindow);
             if (DialogResult.OK == result)
             {
-                textVideoTrackNo = VideoTrackNoBox.Text;
                 textMusicTrackNo = MusicTrackNoBox.Text;
                 textTimeMSToRemove = TimeMSToRemoveBox.Text;
             }
 
-            return Tuple.Create(result, textVideoTrackNo, textMusicTrackNo, textTimeMSToRemove);
+            return Tuple.Create(result, textMusicTrackNo, textTimeMSToRemove);
         }
 
     }
